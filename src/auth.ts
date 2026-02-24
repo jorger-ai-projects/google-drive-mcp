@@ -90,8 +90,18 @@ async function authenticateSA(b64Config: string, keyFilePath: string): Promise<G
  * This is the main entry point for authentication in the MCP server
  */
 export async function authenticate(): Promise<any> {
+  const b64Config = process.env.GOOGLE_DRIVE_CREDENTIALS_CONFIG ?? '';
+  const keyFilePath = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH ?? '';
+
+  const hasSAEnv = (b64Config.trim() !== '') || (keyFilePath.trim() !== '');
+
+  if (hasSAEnv) {
+    return authenticateSA(b64Config, keyFilePath);
+  }
+
+  // No SA env vars set — fall through to existing OAuth2 flow
   console.error('Initializing authentication...');
-  
+
   // Initialize OAuth2 client
   const oauth2Client = await initializeOAuth2Client();
   const tokenManager = new TokenManager(oauth2Client);
@@ -137,6 +147,18 @@ export async function authenticate(): Promise<any> {
  * Used when running "npm run auth" or when the user needs to re-authenticate
  */
 export async function runAuthCommand(): Promise<void> {
+  const b64Config = process.env.GOOGLE_DRIVE_CREDENTIALS_CONFIG ?? '';
+  const keyFilePath = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH ?? '';
+
+  if (b64Config.trim() !== '' || keyFilePath.trim() !== '') {
+    console.error(
+      'Service account auth is active. No interactive authentication is needed.\n' +
+      'The server authenticates headlessly using the configured service account credentials.\n' +
+      'To use OAuth2 instead, remove GOOGLE_DRIVE_CREDENTIALS_CONFIG and GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH.'
+    );
+    process.exit(0);
+  }
+
   try {
     console.error('Google Drive MCP - Manual Authentication');
     console.error('════════════════════════════════════════\n');

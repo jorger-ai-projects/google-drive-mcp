@@ -5950,6 +5950,14 @@ async function main() {
     case "start":
     case undefined:
       try {
+        // Eagerly validate SA credentials at startup if env vars are set
+        // (authenticate() is normally lazy — this ensures hard-fail happens before server starts)
+        const b64Startup = process.env.GOOGLE_DRIVE_CREDENTIALS_CONFIG ?? '';
+        const kfpStartup = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH ?? '';
+        if (b64Startup.trim() !== '' || kfpStartup.trim() !== '') {
+          authClient = await authenticate();
+        }
+
         // Start the MCP server
         console.error("Starting Google Drive MCP server...");
         const transport = new StdioServerTransport();

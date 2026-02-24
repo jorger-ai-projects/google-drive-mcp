@@ -2,10 +2,88 @@
 import { initializeOAuth2Client } from './auth/client.js';
 import { AuthServer } from './auth/server.js';
 import { TokenManager } from './auth/tokenManager.js';
+import { GoogleAuth } from 'google-auth-library';
+import { readFile } from 'fs/promises';
 
 export { TokenManager } from './auth/tokenManager.js';
 export { initializeOAuth2Client } from './auth/client.js';
 export { AuthServer } from './auth/server.js';
+
+const SA_SCOPES = [
+  'https://www.googleapis.com/auth/drive',
+  'https://www.googleapis.com/auth/drive.file',
+  'https://www.googleapis.com/auth/drive.readonly',
+  'https://www.googleapis.com/auth/documents',
+  'https://www.googleapis.com/auth/spreadsheets',
+  'https://www.googleapis.com/auth/presentations',
+  'https://www.googleapis.com/auth/calendar',
+  'https://www.googleapis.com/auth/calendar.events'
+];
+
+function validateSACredentials(json: any, envVarName: string): void {
+  if (json.type !== 'service_account') {
+    console.error(
+      `${envVarName}: expected service account credentials (type: "service_account"), ` +
+      `got "${json.type ?? 'no type field'}". ` +
+      `Use a service account key JSON, not an OAuth2 client credentials file.`
+    );
+    process.exit(1);
+  }
+  const missing = ['client_email', 'private_key'].filter((f) => !json[f]);
+  if (missing.length > 0) {
+    console.error(
+      `${envVarName}: service account JSON is missing required field(s): ${missing.join(', ')}`
+    );
+    process.exit(1);
+  }
+}
+
+async function authenticateSA(b64Config: string, keyFilePath: string): Promise<GoogleAuth> {
+  // Priority 1: base64-encoded JSON (GOOGLE_DRIVE_CREDENTIALS_CONFIG)
+  if (b64Config && b64Config.trim() !== '') {
+    let decoded: string;
+    try {
+      decoded = Buffer.from(b64Config, 'base64').toString('utf-8');
+    } catch {
+      console.error('GOOGLE_DRIVE_CREDENTIALS_CONFIG: base64 decode failed.');
+      process.exit(1);
+    }
+    let credentials: any;
+    try {
+      credentials = JSON.parse(decoded!);
+    } catch {
+      console.error('GOOGLE_DRIVE_CREDENTIALS_CONFIG: decoded value is not valid JSON.');
+      process.exit(1);
+    }
+    validateSACredentials(credentials!, 'GOOGLE_DRIVE_CREDENTIALS_CONFIG');
+    console.error(`Auth method: service account (base64) — ${credentials!.client_email}`);
+    return new GoogleAuth({ credentials: credentials!, scopes: SA_SCOPES });
+  }
+
+  // Priority 2: key file path (GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH)
+  let fileContent: string;
+  try {
+    fileContent = await readFile(keyFilePath, 'utf-8');
+  } catch {
+    console.error(
+      `GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH: cannot read file at "${keyFilePath}". ` +
+      `Check that the file exists and is readable.`
+    );
+    process.exit(1);
+  }
+  let credentials: any;
+  try {
+    credentials = JSON.parse(fileContent!);
+  } catch {
+    console.error(
+      `GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH: file at "${keyFilePath}" is not valid JSON.`
+    );
+    process.exit(1);
+  }
+  validateSACredentials(credentials!, 'GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH');
+  console.error(`Auth method: service account (key file) — ${credentials!.client_email}`);
+  return new GoogleAuth({ credentials: credentials!, scopes: SA_SCOPES });
+}
 
 /**
  * Authenticate and return OAuth2 client

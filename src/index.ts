@@ -386,6 +386,18 @@ function showVersion(): void {
 }
 
 async function runAuthServer(): Promise<void> {
+  const b64Config = process.env.GOOGLE_DRIVE_CREDENTIALS_CONFIG ?? '';
+  const keyFilePath = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH ?? '';
+
+  if (b64Config.trim() !== '' || keyFilePath.trim() !== '') {
+    console.error(
+      'Service account auth is active. No interactive authentication is needed.\n' +
+      'The server authenticates headlessly using the configured service account credentials.\n' +
+      'To use OAuth2 instead, remove GOOGLE_DRIVE_CREDENTIALS_CONFIG and GOOGLE_DRIVE_SERVICE_ACCOUNT_PATH.'
+    );
+    process.exit(0);
+  }
+
   try {
     const oauth2Client = await initializeOAuth2Client();
     const authServerInstance = new AuthServer(oauth2Client);
